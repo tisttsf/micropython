@@ -77,6 +77,35 @@ set(SOURCE_QSTR
     ${SOURCE_PORT}
 )
 
+set(IDF_COMPONENTS
+    app_update
+    bootloader_support
+    driver
+    esp32
+    esp_common
+    esp_eth
+    esp_event
+    esp_netif
+    esp_ringbuf
+    esp_rom
+    esp_wifi
+    freertos
+    heap
+    log
+    lwip
+    mbedtls
+    mdns
+    newlib
+    nvs_flash
+    sdmmc
+    soc
+    spi_flash
+    tcpip_adapter
+    ulp
+    vfs
+    xtensa
+)
+
 # Register the main IDF component.
 idf_component_register(
     SRCS
@@ -92,25 +121,24 @@ idf_component_register(
         ${MPY_BOARD_DIR}
         ${CMAKE_BINARY_DIR}
     REQUIRES
-        soc nvs_flash ulp sdmmc mdns app_update lwip
+        ${IDF_COMPONENTS}
 )
+
+# Set the MicroPython target as the current (main) IDF component target.
+set(MICROPYTHON_TARGET ${COMPONENT_TARGET})
 
 # Define mpy-cross flags and frozen manifest
 set(MPY_CROSS_FLAGS -march=xtensawin)
 set(FROZEN_MANIFEST ${PROJECT_DIR}/boards/manifest.py)
 
-# Include the main MicroPython cmake rules.
-set(MICROPYTHON_TARGET ${COMPONENT_TARGET})
-include(${MPY_DIR}/py/mkrules.cmake)
-
 # Set compile options for this port.
-target_compile_options(${MICROPYTHON_TARGET} PUBLIC
-    -DMICROPY_ESP_IDF_4=1
-    -DMICROPY_VFS_FAT=1
-    -DMICROPY_VFS_LFS2=1
-    -DFFCONF_H=\"${OOFATFS_DIR}/ffconf.h\"
-    -DLFS1_NO_MALLOC -DLFS1_NO_DEBUG -DLFS1_NO_WARN -DLFS1_NO_ERROR -DLFS1_NO_ASSERT
-    -DLFS2_NO_MALLOC -DLFS2_NO_DEBUG -DLFS2_NO_WARN -DLFS2_NO_ERROR -DLFS2_NO_ASSERT
+target_compile_definitions(${MICROPYTHON_TARGET} PUBLIC
+    MICROPY_ESP_IDF_4=1
+    MICROPY_VFS_FAT=1
+    MICROPY_VFS_LFS2=1
+    FFCONF_H=\"${OOFATFS_DIR}/ffconf.h\"
+    LFS1_NO_MALLOC LFS1_NO_DEBUG LFS1_NO_WARN LFS1_NO_ERROR LFS1_NO_ASSERT
+    LFS2_NO_MALLOC LFS2_NO_DEBUG LFS2_NO_WARN LFS2_NO_ERROR LFS2_NO_ASSERT
 )
 
 # Disable some warnings to keep the build output clean.
@@ -119,3 +147,26 @@ target_compile_options(${MICROPYTHON_TARGET} PUBLIC
     -Wno-deprecated-declarations
     -Wno-missing-field-initializers
 )
+
+# Collect all of the include directories and compile definitions for the IDF components.
+foreach(comp ${IDF_COMPONENTS})
+    get_target_property(type __idf_${comp} TYPE)
+    set(_inc OFF)
+    set(_def OFF)
+    if(${type} STREQUAL STATIC_LIBRARY)
+        get_target_property(_inc __idf_${comp} INCLUDE_DIRECTORIES)
+        get_target_property(_def __idf_${comp} COMPILE_DEFINITIONS)
+    elseif(${type} STREQUAL INTERFACE_LIBRARY)
+        get_target_property(_inc __idf_${comp} INTERFACE_INCLUDE_DIRECTORIES)
+        get_target_property(_def __idf_${comp} INTERFACE_COMPILE_DEFINITIONS)
+    endif()
+    if(_inc)
+        list(APPEND MPY_CPP_INC_EXTRA ${_inc})
+    endif()
+    if(_def)
+        list(APPEND MPY_CPP_DEF_EXTRA ${_def})
+    endif()
+endforeach()
+
+# Include the main MicroPython cmake rules.
+include(${MPY_DIR}/py/mkrules.cmake)
