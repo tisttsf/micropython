@@ -11,6 +11,25 @@ set(MPY_QSTR_DEFS_PREPROCESSED "${MPY_GENHDR_DIR}/qstrdefs.preprocessed.h")
 set(MPY_QSTR_DEFS_GENERATED "${MPY_GENHDR_DIR}/qstrdefs.generated.h")
 set(MPY_FROZEN_CONTENT "${CMAKE_BINARY_DIR}/frozen_content.c")
 
+# Provide defaults
+if(NOT MPY_CPP_FLAGS)
+    get_target_property(MPY_CPP_INC ${MICROPYTHON_TARGET} INCLUDE_DIRECTORIES)
+    get_target_property(MPY_CPP_DEF ${MICROPYTHON_TARGET} COMPILE_DEFINITIONS)
+endif()
+
+# Compute MPY_CPP_FLAGS for preprocessor
+list(APPEND MPY_CPP_INC ${MPY_CPP_INC_EXTRA})
+list(APPEND MPY_CPP_DEF ${MPY_CPP_DEF_EXTRA})
+set(_prefix "-I")
+foreach(x ${MPY_CPP_INC})
+    list(APPEND MPY_CPP_FLAGS ${_prefix}${x})
+endforeach()
+set(_prefix "-D")
+foreach(x ${MPY_CPP_DEF})
+    list(APPEND MPY_CPP_FLAGS ${_prefix}${x})
+endforeach()
+list(APPEND MPY_CPP_FLAGS ${MPY_CPP_FLAGS_EXTRA})
+
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 target_sources(${MICROPYTHON_TARGET} PRIVATE
@@ -53,7 +72,7 @@ add_custom_command(
 # last run, but it looks like it's not possible to specify that with cmake.
 add_custom_command(
     OUTPUT ${MPY_QSTR_DEFS_LAST}
-    COMMAND ${CMAKE_C_COMPILER} -E \$\(C_INCLUDES\) \$\(C_FLAGS\) -DNO_QSTR ${SOURCE_QSTR} > ${MPY_GENHDR_DIR}/qstr.i.last
+    COMMAND ${CMAKE_C_COMPILER} -E ${MPY_CPP_FLAGS} -DNO_QSTR ${SOURCE_QSTR} > ${MPY_GENHDR_DIR}/qstr.i.last
     DEPENDS ${MPY_MODULEDEFS}
         ${SOURCE_QSTR}
     VERBATIM
@@ -76,7 +95,7 @@ add_custom_command(
 
 add_custom_command(
     OUTPUT ${MPY_QSTR_DEFS_PREPROCESSED}
-    COMMAND cat ${MPY_PY_QSTRDEFS} ${MPY_QSTR_DEFS_COLLECTED} | sed "s/^Q(.*)/\"&\"/" | ${CMAKE_C_COMPILER} -E \$\(C_INCLUDES\) \$\(C_FLAGS\) - | sed "s/^\\\"\\(Q(.*)\\)\\\"/\\1/" > ${MPY_QSTR_DEFS_PREPROCESSED}
+    COMMAND cat ${MPY_PY_QSTRDEFS} ${MPY_QSTR_DEFS_COLLECTED} | sed "s/^Q(.*)/\"&\"/" | ${CMAKE_C_COMPILER} -E ${MPY_CPP_FLAGS} - | sed "s/^\\\"\\(Q(.*)\\)\\\"/\\1/" > ${MPY_QSTR_DEFS_PREPROCESSED}
     DEPENDS ${MPY_QSTR_DEFS_COLLECTED}
     VERBATIM
 )
@@ -90,9 +109,9 @@ add_custom_command(
 
 # Build frozen code
 
-target_compile_options(${MICROPYTHON_TARGET} PUBLIC
-    -DMICROPY_QSTR_EXTRA_POOL=mp_qstr_frozen_const_pool
-    -DMICROPY_MODULE_FROZEN_MPY=\(1\)
+target_compile_definitions(${MICROPYTHON_TARGET} PUBLIC
+    MICROPY_QSTR_EXTRA_POOL=mp_qstr_frozen_const_pool
+    MICROPY_MODULE_FROZEN_MPY=\(1\)
 )
 
 add_custom_command(
